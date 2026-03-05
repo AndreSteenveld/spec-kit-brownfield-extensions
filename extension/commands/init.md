@@ -118,8 +118,8 @@ specify init --here --ai claude --force
 First, perform a comprehensive project structure scan:
 
 1. **Identify project root marker files**:
-    - Package managers: `package.json`, `pom.xml`, `build.gradle`, `Cargo.toml`, `pyproject.toml`, `go.mod`, `Gemfile`, `composer.json`
-    - Config files: `.editorconfig`, `.prettierrc`, `.eslintrc.*`, `tsconfig.json`, `tox.ini`, `setup.cfg`
+    - Package managers: `package.json`, `pom.xml`, `build.gradle`, `Cargo.toml`, `pyproject.toml`, `go.mod`, `Gemfile`, `composer.json`, `*.csproj`, `*.fsproj`, `*.vbproj`, `*.sln`
+    - Config files: `.editorconfig`, `.prettierrc`, `.eslintrc.*`, `tsconfig.json`, `tox.ini`, `setup.cfg`, `global.json`, `nuget.config`, `Directory.Build.props`, `Directory.Build.targets`
     - Version control: `.git/`, `.gitignore`, `.gitattributes`
     - CI/CD: `.github/workflows/`, `.gitlab-ci.yml`, `Jenkinsfile`, `azure-pipelines.yml`
     - Containerization: `Dockerfile`, `docker-compose.yml`, `kubernetes/`
@@ -160,16 +160,33 @@ Based on scan results, build the tech stack profile:
 **CI/CD System**: [Identified CI/CD tool]
 ```
 
+**Language-Specific Detection Examples**:
+
+**.NET Projects**:
+- Check `global.json` for SDK version: `"sdk": { "version": "8.0.100" }`
+- Parse `*.csproj` for target framework: `<TargetFramework>net8.0</TargetFramework>`
+- Identify framework from package references:
+  - ASP.NET Core: `<PackageReference Include="Microsoft.AspNetCore.*" />`
+  - Entity Framework Core: `<PackageReference Include="Microsoft.EntityFrameworkCore.*" />`
+  - Blazor: `<PackageReference Include="Microsoft.AspNetCore.Components.*" />`
+- Test frameworks from package references:
+  - xUnit: `<PackageReference Include="xunit" />`
+  - NUnit: `<PackageReference Include="NUnit" />`
+  - MSTest: `<PackageReference Include="MSTest.*" />`
+- Package manager: NuGet (check for `nuget.config`, `Directory.Packages.props`)
+- Build tool: MSBuild/dotnet CLI
+
 #### Step 0.3: Architecture Pattern Recognition
 
 Analyze code structure to identify architectural patterns:
 
 1. **Directory naming pattern analysis**:
-    - `src/controllers/`, `src/handlers/` → MVC/Layered Architecture
-    - `src/domain/`, `src/application/`, `src/infrastructure/` → Onion/Hexagonal Architecture
-    - `services/`, `microservices/` → Microservices Architecture
-    - `modules/`, `packages/` → Modular Monolith
-    - `frontend/`, `backend/` → Frontend-Backend Separation
+    - `src/controllers/`, `src/handlers/`, `Controllers/` → MVC/Layered Architecture
+    - `src/domain/`, `src/application/`, `src/infrastructure/`, `Core/`, `Application/`, `Infrastructure/` → Onion/Hexagonal/Clean Architecture
+    - `services/`, `microservices/`, `src/Services/` → Microservices Architecture
+    - `modules/`, `packages/`, `Modules/` → Modular Monolith
+    - `frontend/`, `backend/`, `WebApi/`, `BlazorApp/` → Frontend-Backend Separation
+    - `Domain/`, `Application/`, `Infrastructure/`, `Presentation/` → DDD (Domain-Driven Design)
 
 2. **Code organization patterns**:
     - Feature-based organization
@@ -177,10 +194,14 @@ Analyze code structure to identify architectural patterns:
     - Domain-based organization
 
 3. **Common pattern detection**:
-    - Repository Pattern: `*Repository.*`, `*Repo.*`
-    - Service Layer: `*Service.*`, `*Manager.*`
-    - Factory Pattern: `*Factory.*`
-    - DTO/VO: `*DTO.*`, `*VO.*`, `*Model.*`
+    - Repository Pattern: `*Repository.*`, `*Repo.*`, `I*Repository.cs`
+    - Service Layer: `*Service.*`, `*Manager.*`, `I*Service.cs`
+    - Factory Pattern: `*Factory.*`, `I*Factory.cs`
+    - DTO/VO: `*DTO.*`, `*VO.*`, `*Model.*`, `*Dto.cs`, `*ViewModel.cs`
+    - DbContext (EF Core): `*DbContext.cs`, `*Context.cs`
+    - Controllers: `*Controller.cs`, `*ApiController.cs`
+    - Middleware: `*Middleware.cs`
+    - Dependency Injection: `Startup.cs`, `Program.cs`, `ServiceCollectionExtensions.cs`
 
 #### Step 0.4: Coding Convention Extraction
 
@@ -191,12 +212,17 @@ Extract actual conventions from existing code:
     - .editorconfig → General formatting standards
     - pylint/flake8/black config → Python standards
     - checkstyle/spotless config → Java standards
+    - .editorconfig with C# settings → C# formatting standards
+    - Directory.Build.props → MSBuild/analyzer configurations
+    - .globalconfig → .NET analyzer settings
+    - stylecop.json → StyleCop analyzer rules
 
 2. **Infer from code samples**:
-    - Naming conventions (camelCase, snake_case, PascalCase)
-    - File naming patterns (kebab-case.ts, PascalCase.java)
-    - Comment style (JSDoc, docstring, Javadoc)
-    - Import organization
+    - Naming conventions (camelCase, snake_case, PascalCase, _camelCase for private fields)
+    - File naming patterns (kebab-case.ts, PascalCase.java, PascalCase.cs)
+    - Comment style (JSDoc, docstring, Javadoc, XML documentation comments)
+    - Import organization (using statements, namespace declarations)
+    - Interface naming (I-prefix convention in C#)
 
 3. **Infer from Git history** (optional):
     - Commit message format
@@ -217,6 +243,8 @@ Extract actual conventions from existing code:
 | **Go Workspace** | `go.work` file exists | Parse `use` directives |
 | **Rust Workspace** | `Cargo.toml` contains `[workspace]` | Parse `members` config |
 | **Python Monorepo** | Multiple `pyproject.toml` or `setup.py` | Search for multiple package definition files |
+| **.NET Solution** | `*.sln` file exists | Parse `Project` entries in solution file |
+| **.NET Multi-project** | Multiple `*.csproj`/`*.fsproj` files | Search for multiple project files |
 
 ##### 2. Enumerate All Submodules
 
@@ -244,20 +272,35 @@ grep -oP '(?<=<module>)[^<]+' pom.xml
 grep -oP "include\s*['\"]([^'\"]+)['\"]" settings.gradle
 ```
 
+**.NET Solution project example**:
+```bash
+# Parse solution file to get all projects
+grep -oP 'Project\("\{[^}]+\}"\)\s*=\s*"([^"]+)"' *.sln | cut -d'"' -f4
+# Or extract project paths
+grep -oP '"\w+\.csproj"' *.sln | tr -d '"'
+```
+
+**.NET Multi-project example**:
+```bash
+# Find all C# project files
+find . -name "*.csproj" -o -name "*.fsproj" -o -name "*.vbproj" | grep -v bin | grep -v obj
+```
+
 ##### 3. Analyze Submodule Responsibilities
 
 **Analyze and classify responsibilities for each submodule**:
 
 | Module Category | Typical Naming Patterns | Responsibility Description |
 |-----------------|------------------------|---------------------------|
-| **API/Interface Layer** | `*-api`, `*-interface`, `*-facade` | External interface definitions, DTO/VO |
-| **Service Implementation Layer** | `*-service`, `*-impl`, `*-core` | Business logic implementation |
-| **Data Access Layer** | `*-dao`, `*-repository`, `*-persistence` | Database operations, Entity definitions |
-| **Common Utility Layer** | `*-common`, `*-utils`, `*-base` | Shared utility classes, infrastructure |
-| **Web/Controller Layer** | `*-web`, `*-controller`, `*-rest` | HTTP endpoints, request handling |
-| **Bootstrap Module** | `*-app`, `*-boot`, `*-starter` | Application startup entry, configuration assembly |
-| **Domain Module** | `*-domain`, `*-model` | Domain models, business entities |
-| **Integration/Adapter** | `*-integration`, `*-adapter`, `*-client` | Third-party system integration |
+| **API/Interface Layer** | `*-api`, `*-interface`, `*-facade`, `*.Api`, `*.Contracts` | External interface definitions, DTO/VO |
+| **Service Implementation Layer** | `*-service`, `*-impl`, `*-core`, `*.Services`, `*.Business`, `*.Application` | Business logic implementation |
+| **Data Access Layer** | `*-dao`, `*-repository`, `*-persistence`, `*.Data`, `*.Infrastructure`, `*.EntityFramework` | Database operations, Entity definitions |
+| **Common Utility Layer** | `*-common`, `*-utils`, `*-base`, `*.Common`, `*.Shared`, `*.Core` | Shared utility classes, infrastructure |
+| **Web/Controller Layer** | `*-web`, `*-controller`, `*-rest`, `*.Web`, `*.WebApi`, `*.Controllers` | HTTP endpoints, request handling |
+| **Bootstrap Module** | `*-app`, `*-boot`, `*-starter`, `*.Host`, `*.WebHost` | Application startup entry, configuration assembly |
+| **Domain Module** | `*-domain`, `*-model`, `*.Domain`, `*.Models` | Domain models, business entities |
+| **Integration/Adapter** | `*-integration`, `*-adapter`, `*-client`, `*.Integration`, `*.Adapters` | Third-party system integration |
+| **Test Projects** | `*-test`, `*-tests`, `*.Tests`, `*.UnitTests`, `*.IntegrationTests` | Unit and integration tests |
 
 **Generate Module Responsibility Mapping Table**:
 
@@ -280,8 +323,19 @@ grep -oP "include\s*['\"]([^'\"]+)['\"]" settings.gradle
 ```bash
 # Analyze dependencies for each module
 for module in $(grep -oP '(?<=<module>)[^<]+' pom.xml); do
-  echo "=== $module ===" 
+  echo "=== $module ==="
   grep -A1 '<dependency>' $module/pom.xml | grep -oP '(?<=<artifactId>)[^<]+'
+done
+```
+
+**.NET project**:
+```bash
+# Analyze project references for each project
+for proj in $(find . -name "*.csproj" | grep -v bin | grep -v obj); do
+  echo "=== $proj ==="
+  grep -oP '(?<=<ProjectReference Include=")[^"]+' "$proj" | xargs -I {} basename {}
+  # Also check package references
+  grep -oP '(?<=<PackageReference Include=")[^"]+' "$proj"
 done
 ```
 
